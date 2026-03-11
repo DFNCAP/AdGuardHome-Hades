@@ -3,13 +3,7 @@
 'env':
   'GO_VERSION': '1.25.7'
 
-'on':
-  'push':
-    'tags':
-    - 'v*'
-    'branches':
-    - '*'
-  'pull_request':
+'on': 'workflow_dispatch'
 
 'jobs':
   'go-lint':

@@ -199,6 +199,10 @@ type Server struct {
 	// hasIPAddrs is set during the certificate parsing and is true if the
 	// configured certificate contains at least a single IP address.
 	hasIPAddrs bool
+
+	// HADES START
+	firewall *firewallContext
+	// HADES END
 }
 
 // defaultLocalDomainSuffix is the default suffix used to detect internal hosts
@@ -489,6 +493,15 @@ func (s *Server) startLocked(ctx context.Context) error {
 		s.isRunning = true
 	}
 
+	// HADES START
+	if s.firewall != nil && s.isRunning {
+		err = s.firewall.start()
+		if err != nil {
+			return fmt.Errorf("could not start the DNS/Firewall server properly: %w", err)
+		}
+	}
+	// HADES END
+
 	return err
 }
 
@@ -545,6 +558,13 @@ func (s *Server) Prepare(ctx context.Context, conf *ServerConfig) (err error) {
 	s.setupAddrProc()
 
 	s.registerHandlers()
+	// HADES START
+	if s.conf.UDPListenAddrs[0] != nil {
+		s.firewall = initialiseFirewall(s.conf.UDPListenAddrs[0].IP.String(), "")
+	} else {
+		s.firewall = initialiseFirewall("172.10.10.1", "")
+	}
+	// HADES END
 
 	return nil
 }
@@ -818,6 +838,15 @@ func (s *Server) stopLocked(ctx context.Context) {
 		logCloserErr(ctx, b, "closing bootstrap", s.logger.With("address", b.Address()))
 	}
 
+	// HADES START
+	if s.firewall != nil {
+		err := s.firewall.close()
+		if err != nil {
+			s.logger.ErrorContext(ctx, "could not stop the DNS/Firewall server", slogutil.KeyError, err)
+		}
+	}
+	// HADES END
+
 	s.isRunning = false
 }
 
@@ -948,3 +977,36 @@ func (s *Server) IsBlockedClient(ip netip.Addr, clientID string) (blocked bool, 
 
 	return blocked, cmp.Or(rule, clientID)
 }
+
+// HADES START
+// AddNewClientToFirewall - Adds the client to the firewalls IP Tables
+func (s *Server) AddNewClientToFirewall(clientName string, ids []string) error {
+	ipAddress := ""
+	for _, sID := range ids {
+		if net.ParseIP(sID) != nil {
+			ipAddress = sID
+		}
+	}
+
+	if ipAddress != "" && s.firewall != nil {
+		err := s.firewall.addClientFunc(clientName, ipAddress)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// RemoveClientFromFirewall - Removes the client's firewall rules
+func (s *Server) RemoveClientFromFirewall(clientName string) error {
+	if s.firewall != nil {
+		err := s.firewall.removeClientFunc(clientName)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HADES END

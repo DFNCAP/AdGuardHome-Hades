@@ -158,7 +158,7 @@ case "$channel" in
 esac
 
 # Finally, make sure that we don't output invalid versions.
-if ! echo "$version" | grep -E -e '^v[0-9]+\.[0-9]+\.[0-9]+(-(a|b|dev|rc)\.[0-9]+)?(\+[[:xdigit:]]+)?$' -q; then
+if ! echo "$version" | grep -E -e '^v[0-9]+\.[0-9]+\.[0-9]+(-(a|b|dev|rc|hades)\.[0-9]+|(-(hades)))?(\+[[:xdigit:]]+)?$' -q; then
 	echo "generated an invalid version '$version'" 1>&2
 
 	exit 1

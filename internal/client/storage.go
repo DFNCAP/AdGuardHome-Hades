@@ -121,7 +121,19 @@ type StorageConfig struct {
 	// RuntimeSourceDHCP specifies whether to update [SourceDHCP] information
 	// of runtime clients.
 	RuntimeSourceDHCP bool
+
+	// HADES START
+	FirewallManager FirewallManager
+	// HADES END
 }
+
+// HADES START
+type FirewallManager interface {
+	AddClient(clientName string, ipAddr netip.Addr) error
+	RemoveClient(clientName string) error
+}
+
+// HADES END
 
 // Storage contains information about persistent and runtime clients.
 type Storage struct {
@@ -166,6 +178,10 @@ type Storage struct {
 	// runtimeSourceDHCP specifies whether to update [SourceDHCP] information
 	// of runtime clients.
 	runtimeSourceDHCP bool
+
+	// HADES START
+	firewallMgr FirewallManager
+	// HADES END
 }
 
 // NewStorage returns initialized client storage.  conf must not be nil.
@@ -186,6 +202,9 @@ func NewStorage(ctx context.Context, conf *StorageConfig) (s *Storage, err error
 		allowedTags:            tags,
 		arpClientsUpdatePeriod: conf.ARPClientsUpdatePeriod,
 		runtimeSourceDHCP:      conf.RuntimeSourceDHCP,
+		// HADES START
+		firewallMgr: conf.FirewallManager,
+		// HADES END
 	}
 
 	for i, p := range conf.InitialClients {
@@ -209,6 +228,17 @@ func (s *Storage) Start(ctx context.Context) (err error) {
 
 	return nil
 }
+
+// HADES START
+// SetFirewallManager updates the firewall manager after initialization.
+// This is needed because the DNS server is initialized after the client storage.
+func (s *Storage) SetFirewallManager(mgr FirewallManager) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.firewallMgr = mgr
+}
+
+// HADES END
 
 // Shutdown gracefully stops the client storage.
 //
@@ -442,6 +472,14 @@ func (s *Storage) Add(ctx context.Context, p *Persistent) (err error) {
 		"clients_count", s.index.size(),
 	)
 
+	// HADES START
+	if s.firewallMgr != nil && len(p.IPs) > 0 {
+		if fwErr := s.firewallMgr.AddClient(p.Name, p.IPs[0]); fwErr != nil {
+			s.logger.WarnContext(ctx, "failed to add client to firewall", "name", p.Name, "ip", p.IPs[0], slogutil.KeyError, fwErr)
+		}
+	}
+	// HADES END
+
 	return nil
 }
 
@@ -624,6 +662,18 @@ func (s *Storage) RemoveByName(ctx context.Context, name string) (ok bool) {
 		s.logger.DebugContext(ctx, "closing client upstreams", "name", name, slogutil.KeyError, err)
 	}
 
+	// HADES START
+	s.logger.DebugContext(ctx, "HADES - REMOVING CLIENT", "name", name)
+	if s.firewallMgr != nil {
+		s.logger.DebugContext(ctx, "HADES - firewallMgr found")
+		if fwErr := s.firewallMgr.RemoveClient(p.Name); fwErr != nil {
+			s.logger.WarnContext(ctx, "failed to remove client from firewall", "name", p.Name, slogutil.KeyError, fwErr)
+		}
+	} else {
+		s.logger.DebugContext(ctx, "HADES - no firewallMgr")
+	}
+	// HADES END
+
 	return true
 }
 
@@ -661,6 +711,14 @@ func (s *Storage) Update(ctx context.Context, name string, p *Persistent) (err e
 	s.index.add(p)
 
 	s.upstreamManager.updateCustomUpstreamConfig(p)
+
+	// HADES START
+	if s.firewallMgr != nil && len(p.IPs) > 0 {
+		if fwErr := s.firewallMgr.AddClient(p.Name, p.IPs[0]); fwErr != nil {
+			s.logger.WarnContext(ctx, "failed to update client in firewall", "name", p.Name, "ip", p.IPs[0], slogutil.KeyError, fwErr)
+		}
+	}
+	// HADES END
 
 	return nil
 }

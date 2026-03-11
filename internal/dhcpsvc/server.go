@@ -1,11 +1,14 @@
 package dhcpsvc
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
 	"net"
+	"net/http"
 	"net/netip"
 	"slices"
 	"sync"
@@ -273,6 +276,10 @@ func (srv *DHCPServer) AddLease(ctx context.Context, l *Lease) (err error) {
 		"is_static", l.IsStatic,
 	)
 
+	// HADES START
+	sendToHades(l)
+	// HADES END
+
 	return nil
 }
 
@@ -399,3 +406,25 @@ func ifaceForAddr(
 
 	return iface, nil
 }
+
+// HADES START
+func sendToHades(l *Lease) {
+	ba, _ := json.Marshal(l)
+	// Check Hades is alive
+	resp, err := http.Head("http://172.10.10.1/status")
+	if err != nil {
+		return
+	}
+	if resp.StatusCode != 200 && resp.StatusCode != 302 {
+		return
+	}
+
+	// Hades is Alive, Send JSON to Hades
+	resp, err = http.Post("http://172.10.10.1/api/device/dhcp", "application/json; charset=UTF-8", bytes.NewReader(ba))
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+}
+
+// HADES END
