@@ -61,6 +61,10 @@ type clientsContainer struct {
 	// safeSearchCacheTTL is the TTL of the safe search cache to use for
 	// persistent clients.
 	safeSearchCacheTTL time.Duration
+
+	// HADES START
+	firewallMgr client.FirewallManager
+	// HADES END
 }
 
 // BlockedClientChecker checks if a client is blocked by the current access
@@ -132,6 +136,9 @@ func (clients *clientsContainer) Init(
 		ARPDB:                  arpDB,
 		ARPClientsUpdatePeriod: arpClientsUpdatePeriod,
 		RuntimeSourceDHCP:      config.Clients.Sources.DHCP,
+		// HADES START
+		FirewallManager: clients.firewallMgr,
+		// HADES END
 	})
 	if err != nil {
 		return fmt.Errorf("init client storage: %w", err)

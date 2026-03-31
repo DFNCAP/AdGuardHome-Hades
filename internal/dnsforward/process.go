@@ -57,6 +57,11 @@ type dnsContext struct {
 	// isDHCPHost is true if the request for a local domain name and the DHCP is
 	// available for this request.
 	isDHCPHost bool
+
+	// HADES START
+	// srv is the DNS server instance for accessing firewall
+	srv *Server
+	// HADES END
 }
 
 // resultCode is the result of a request processing function.
@@ -89,6 +94,9 @@ func (s *Server) handleDNSRequest(_ *proxy.Proxy, pctx *proxy.DNSContext) error 
 		proxyCtx:  pctx,
 		result:    &filtering.Result{},
 		startTime: time.Now(),
+		// HADES START
+		srv: s,
+		// HADES END
 	}
 
 	type modProcessFunc func(ctx context.Context, dctx *dnsContext) (rc resultCode)
@@ -108,6 +116,9 @@ func (s *Server) handleDNSRequest(_ *proxy.Proxy, pctx *proxy.DNSContext) error 
 		s.processFilteringAfterResponse,
 		s.ipset.process,
 		s.processQueryLogsAndStats,
+		// HADES START
+		s.processIPTables,
+		// HADES END
 	}
 	for _, process := range mods {
 		r := process(ctx, dctx)
@@ -654,3 +665,11 @@ func (s *Server) filterAfterResponse(ctx context.Context, dctx *dnsContext) (res
 
 	return resultCodeSuccess
 }
+
+// HADES START
+func (s *Server) processIPTables(ctx context.Context, dctx *dnsContext) (rc resultCode) {
+	s.logger.DebugContext(ctx, "processing IP tables")
+	return processIPTables(ctx, dctx)
+}
+
+// HADES END

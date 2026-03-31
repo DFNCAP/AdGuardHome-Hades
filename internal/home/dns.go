@@ -160,6 +160,12 @@ func initDNSServer(
 
 	globalContext.clients.clientChecker = globalContext.dnsServer
 
+	// HADES START
+	globalContext.clients.firewallMgr = &firewallAdapter{dnsServer: globalContext.dnsServer}
+	// Update the storage's firewallMgr field since it was nil during initialization
+	globalContext.clients.storage.SetFirewallManager(globalContext.clients.firewallMgr)
+	// HADES END
+
 	dnsConf, err := newServerConfig(
 		&config.DNS,
 		config.Clients.Sources,
@@ -566,3 +572,30 @@ func checkDir(path string) (err error) {
 
 	return nil
 }
+
+// HADES START
+// firewallAdapter implements client.FirewallManager interface to connect
+// the DNS server's firewall to the client storage.
+type firewallAdapter struct {
+	dnsServer *dnsforward.Server
+}
+
+// AddClient implements the client.FirewallManager interface for firewallAdapter.
+func (f *firewallAdapter) AddClient(clientName string, ipAddr netip.Addr) error {
+	if f.dnsServer == nil {
+		return nil
+	}
+	ids := []string{ipAddr.String()}
+	return f.dnsServer.AddNewClientToFirewall(clientName, ids)
+}
+
+// RemoveClient implements the client.FirewallManager interface for firewallAdapter.
+func (f *firewallAdapter) RemoveClient(clientName string) error {
+	log.Debug("HADES - Removing client name: %s", clientName)
+	if f.dnsServer == nil {
+		return nil
+	}
+	return f.dnsServer.RemoveClientFromFirewall(clientName)
+}
+
+// HADES END
